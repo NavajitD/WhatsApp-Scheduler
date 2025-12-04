@@ -44,13 +44,29 @@ if (!fs.existsSync(authPath)) {
     fs.mkdirSync(authPath, { recursive: true });
 }
 
-// Initialize WhatsApp client
+// Clean up any stale lock files on startup
+const lockFile = path.join(authPath, 'session', 'SingletonLock');
+const cookieLock = path.join(authPath, 'session', 'SingletonCookie');
+const socketLock = path.join(authPath, 'session', 'SingletonSocket');
+[lockFile, cookieLock, socketLock].forEach(file => {
+    try {
+        if (fs.existsSync(file)) {
+            fs.unlinkSync(file);
+            console.log(`🧹 Removed stale lock file: ${file}`);
+        }
+    } catch (e) {
+        console.log(`Could not remove lock file: ${file}`);
+    }
+});
+
+// Initialize WhatsApp client with memory-optimized settings
 const client = new Client({
     authStrategy: new LocalAuth({
         dataPath: authPath
     }),
     puppeteer: {
         headless: true,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -59,9 +75,31 @@ const client = new Client({
             '--no-first-run',
             '--no-zygote',
             '--single-process',
-            '--disable-gpu'
-        ]
-    }
+            '--disable-gpu',
+            '--disable-software-rasterizer',
+            '--disable-extensions',
+            '--disable-background-networking',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-breakpad',
+            '--disable-component-extensions-with-background-pages',
+            '--disable-component-update',
+            '--disable-default-apps',
+            '--disable-features=TranslateUI',
+            '--disable-hang-monitor',
+            '--disable-ipc-flooding-protection',
+            '--disable-popup-blocking',
+            '--disable-prompt-on-repost',
+            '--disable-renderer-backgrounding',
+            '--disable-sync',
+            '--metrics-recording-only',
+            '--no-default-browser-check',
+            '--mute-audio',
+            '--js-flags=--max-old-space-size=256'
+        ],
+        timeout: 60000
+    },
+    qrMaxRetries: 5
 });
 
 // WhatsApp Event Handlers
@@ -138,11 +176,7 @@ setInterval(async () => {
     }
 }, 5 * 60 * 1000);
 
-// Initialize WhatsApp client
-console.log('🚀 Initializing WhatsApp client...');
-client.initialize().catch(err => {
-    console.error('Client initialization error:', err);
-});
+// WhatsApp client will be initialized after server starts
 
 // ===================
 // API ROUTES
@@ -543,7 +577,7 @@ cron.schedule('0 0 * * *', () => {
 });
 
 // ===================
-// START SERVER
+// START SERVER FIRST (before WhatsApp init to avoid timeout)
 // ===================
 
 app.listen(PORT, () => {
@@ -563,6 +597,12 @@ app.listen(PORT, () => {
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
     `);
+    
+    // Initialize WhatsApp client AFTER server starts
+    console.log('🚀 Initializing WhatsApp client...');
+    client.initialize().catch(err => {
+        console.error('Client initialization error:', err.message);
+    });
 });
 
 // Graceful shutdown
