@@ -1,0 +1,17 @@
+# render.yaml - Render Blueprint specification
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: whatsapp-scheduler
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter # Use 'free' for free tier, 'starter' for paid
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+    disk:
+      name: whatsapp-session
+      mountPath: /app/.wwebjs_auth
+      sizeGB: 1
