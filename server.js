@@ -44,20 +44,30 @@ if (!fs.existsSync(authPath)) {
     fs.mkdirSync(authPath, { recursive: true });
 }
 
-// Clean up any stale lock files on startup
-const lockFile = path.join(authPath, 'session', 'SingletonLock');
-const cookieLock = path.join(authPath, 'session', 'SingletonCookie');
-const socketLock = path.join(authPath, 'session', 'SingletonSocket');
-[lockFile, cookieLock, socketLock].forEach(file => {
+// Clean up ALL lock files recursively on startup
+function cleanLockFiles(dir) {
+    if (!fs.existsSync(dir)) return;
+    
     try {
-        if (fs.existsSync(file)) {
-            fs.unlinkSync(file);
-            console.log(`🧹 Removed stale lock file: ${file}`);
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+            const filePath = path.join(dir, file);
+            const stat = fs.statSync(filePath);
+            
+            if (stat.isDirectory()) {
+                cleanLockFiles(filePath); // Recurse into subdirectories
+            } else if (file.startsWith('Singleton') || file.endsWith('.lock') || file === 'lockfile') {
+                fs.unlinkSync(filePath);
+                console.log(`🧹 Removed lock file: ${filePath}`);
+            }
         }
     } catch (e) {
-        console.log(`Could not remove lock file: ${file}`);
+        console.log(`Error cleaning directory ${dir}:`, e.message);
     }
-});
+}
+
+console.log('🧹 Cleaning up stale lock files...');
+cleanLockFiles(authPath);
 
 // Initialize WhatsApp client with memory-optimized settings
 const client = new Client({
